@@ -1,0 +1,7 @@
+{
+  "lastChangelogVersion": "0.78.0",
+  "defaultProvider": "aqueduct",
+  "defaultModel": "qwen-3.5-397b",
+  "defaultThinkingLevel": "medium",
+  "hideThinkingBlock": false
+}

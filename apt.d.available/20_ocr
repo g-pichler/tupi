@@ -1,0 +1,7 @@
+# OCR / PDF tooling
+tesseract-ocr
+tesseract-ocr-deu             # German language data
+tesseract-ocr-script-frak     # Fraktur script data
+poppler-utils                 # pdftotext, pdfimages, ...
+ocrmypdf                      # add an OCR text layer to a PDF
+djvulibre-bin                 # DjVu tools

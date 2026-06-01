@@ -1,0 +1,14 @@
+# Keep the build context small. None of these are COPYed by the Dockerfile.
+# (The apt/python/rust/build .d and .d.available dirs ARE copied — not listed.)
+.git
+.gitignore
+README.md
+CLAUDE.md
+LICENSE
+.env
+.env.example
+docker-compose.yml
+config.d.sh
+compose.d/
+compose.d.available/
+pi-config/

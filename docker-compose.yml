@@ -1,0 +1,47 @@
+services:
+  pi:
+    build:
+      context: .
+      args:
+        NPM_CACHEBUST: ${NPM_CACHEBUST:-0}
+    volumes:
+      - .:/workspace
+      - ./pi-config/agent:/pi-config
+      - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
+      # entrypoint.sh remaps the single `node` user to HOST_UID, so HOME is
+      # always /home/node — host config mounts there regardless of host UID.
+      - ${HOME}/.claude:/home/node/.claude
+      - ${HOME}/.claude.json:/home/node/.claude.json
+      # NOTE: the host Docker socket is NOT mounted by default. Mounting it grants
+      # the container root on the host — opt in by enabling the compose docker.yml
+      # unit: ./config.d.sh enable compose docker.yml
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - PI_CODING_AGENT_DIR=/pi-config
+      - HOST_UID=${HOST_UID:-1000}
+      - HOST_GID=${HOST_GID:-1000}
+      - DISABLE_AUTOUPDATER=1
+    stdin_open: true
+    tty: true
+
+  # Optional: start with `docker compose --profile ollama up -d`.
+  # Requires an NVIDIA GPU + nvidia-container-toolkit on the host.
+  ollama:
+    image: ollama/ollama
+    profiles: [ollama]
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  ollama-data:

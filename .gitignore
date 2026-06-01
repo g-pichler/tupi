@@ -1,0 +1,20 @@
+.env
+\#.*\#
+*~
+
+# Enabled drop-in units are local: config.d.sh symlinks them into <type>.d/ from
+# the tracked <type>.d.available/ catalog. Keep each dir's README, ignore the
+# symlinks (and any hand-dropped files).
+apt.d/*
+!apt.d/README.md
+python.d/*
+!python.d/README.md
+rust.d/*
+!rust.d/README.md
+build.d/*
+!build.d/README.md
+compose.d/*
+!compose.d/README.md
+
+# pi writes search-tool binaries here at runtime; never commit them
+pi-config/agent/bin/

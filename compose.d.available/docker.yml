@@ -1,0 +1,24 @@
+# Sample compose.d override: give the agent access to the host Docker daemon.
+#
+# ============================ SECURITY WARNING ============================
+# Mounting /var/run/docker.sock hands the container FULL CONTROL of the host
+# Docker daemon, which is equivalent to ROOT ON THE HOST. Anything running in
+# the container (the agent, any tool or package it runs, any code it writes and
+# executes) can then:
+#   - start privileged containers that mount and rewrite the host filesystem,
+#   - read other containers' data and secrets,
+#   - effectively escalate to root on your machine.
+#
+# This sandbox runs the agent with --dangerously-skip-permissions, so the agent
+# can issue docker commands on its own. Only enable this if you trust the agent
+# and the code it runs with root on your host. Do NOT enable it on shared or
+# production hosts. Consider a rootless Docker daemon or a remote/throwaway host
+# if you need container-in-container without this exposure.
+# =========================================================================
+#
+# To use: copy this file to `compose.d/docker.yml`, then rerun `claude.sh`.
+# entrypoint.sh detects the socket and adds the container user to its group.
+services:
+  pi:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

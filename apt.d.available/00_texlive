@@ -1,0 +1,5 @@
+# Full TeX Live. Huge (multi-GB) and slow to install — that's why it's opt-in.
+# For a smaller footprint, swap for a subset, e.g.:
+#   texlive-latex-extra
+#   texlive-fonts-recommended
+texlive-full

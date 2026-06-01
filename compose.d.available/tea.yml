@@ -1,0 +1,14 @@
+# Sample compose.d override: mount the host tea CLI config into the container.
+#
+# tea (https://gitea.com/gitea/tea) is the CLI for Gitea/Forgejo. Mounting its
+# config dir lets the in-container tea reuse your host logins.
+#
+# To use: copy this file to `compose.d/tea.yml`, then rerun `claude.sh`.
+# run.sh auto-layers every `compose.d/*.yml` on top of docker-compose.yml.
+#
+# entrypoint.sh remaps the single `node` user to HOST_UID, so HOME is always
+# /home/node — mount host config there regardless of your host UID.
+services:
+  pi:
+    volumes:
+      - ${HOME}/.config/tea:/home/node/.config/tea

@@ -1,0 +1,26 @@
+{
+  "providers": {
+    "ollama": {
+      "baseUrl": "http://ollama:11434/v1",
+      "api": "openai-completions",
+      "apiKey": "ollama",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "supportsStrictMode": false
+      },
+      "models": [{ "id": "qwen3:4b" }]
+    },
+    "aqueduct": {
+      "baseUrl": "https://aqueduct.ai.datalab.tuwien.ac.at/v1",
+      "api": "openai-completions",
+      "apiKey": "${AQUEDUCT_API_KEY}",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "supportsStrictMode": false
+      },
+      "models": [{ "id": "qwen-3.5-397b" }]
+    }
+  }
+}
