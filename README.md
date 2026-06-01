@@ -100,9 +100,9 @@ host Docker daemon, enable the unit: `./config.d.sh enable compose docker.yml`.
 
 ## Configuring the pi agent
 
-`pi-config/agent/settings.json` picks the default provider/model. Out of the box it defaults to `anthropic` / `claude-sonnet-4-6`, which uses the built-in Anthropic provider and reads `ANTHROPIC_API_KEY` from `.env` — set that key (see `.env.example`) and pi works with no further config.
+`pi-config/agent/settings.json` picks the default provider/model. Out of the box it defaults to `aqueduct` / `qwen-3.5-397b`, an OpenAI-compatible endpoint that reads `AQUEDUCT_API_KEY` from `.env` — set that key (see `.env.example`) and pi works with no further config.
 
-`pi-config/agent/models.json` defines extra/custom providers. API keys there support `${ENV_VAR}` interpolation, so secrets stay in `.env` rather than the committed config. Two examples ship in it: `ollama` (local models, needs the Ollama service) and `aqueduct` (an OpenAI-compatible endpoint reading `${AQUEDUCT_API_KEY}`) — adapt or replace them, and point `defaultProvider` wherever you like.
+`pi-config/agent/models.json` defines the providers. API keys there support `${ENV_VAR}` interpolation, so secrets stay in `.env` rather than the committed config. Two ship in it: `aqueduct` (the default, reading `${AQUEDUCT_API_KEY}`) and `ollama` (local models, needs the Ollama service) — adapt or replace them, and point `defaultProvider` wherever you like. To use Anthropic Claude instead, switch `defaultProvider` to the built-in `anthropic` provider and set `ANTHROPIC_API_KEY`.
 
 ## Adding tools to the image
 
