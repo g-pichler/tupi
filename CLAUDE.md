@@ -1,4 +1,4 @@
-# pi sandbox
+# TUpi sandbox
 
 Docker-based dev container bundling the [`pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), Claude Code, and the Anthropic SDK on a lean core (Node, git, build tools, Python 3, ripgrep/fd). Heavier tooling (Rust, TeX Live, OCR, Typst, Soufflé, scientific Python) is opt-in via the `*.d/` drop-in package lists. A GPU-backed Ollama service is wired up via `docker-compose`.
 
