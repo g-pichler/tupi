@@ -8,12 +8,16 @@ Docker-based dev container bundling the [`pi-coding-agent`](https://www.npmjs.co
    ```
    cp .env.example .env
    ```
-2. Symlink the wrapper(s) into your `PATH`:
+2. Copy `pi-config/agent/settings.json.example` to `settings.json`:
+   ```
+   cp pi-config/agent/settings.json.example pi-config/agent/settings.json
+   ```
+3. Symlink the wrapper(s) into your `PATH`:
    ```
    ln -s "$(pwd)/run.sh"     ~/bin/claude.sh
    ln -s "$(pwd)/run.sh"     ~/bin/pi.sh
    ```
-3. Run from any directory:
+4. Run from any directory:
    ```
    claude.sh          # launches Claude Code in the current cwd
    pi.sh              # launches the pi coding agent
@@ -100,7 +104,7 @@ host Docker daemon, enable the unit: `./config.d.sh enable compose docker.yml`.
 
 ## Configuring the pi agent
 
-`pi-config/agent/settings.json` picks the default provider/model. Out of the box it defaults to `aqueduct` / `qwen-3.5-397b`, an OpenAI-compatible endpoint that reads `AQUEDUCT_API_KEY` from `.env` — set that key (see `.env.example`) and pi works with no further config.
+`pi-config/agent/settings.json` picks the default provider/model. Copy it from `settings.json.example` (see [Quick start](#quick-start)). Out of the box it defaults to `aqueduct` / `qwen-3.5-397b`, an OpenAI-compatible endpoint that reads `AQUEDUCT_API_KEY` from `.env` — set that key (see `.env.example`) and pi works with no further config.
 
 `pi-config/agent/models.json` defines the providers. API keys there support `${ENV_VAR}` interpolation, so secrets stay in `.env` rather than the committed config. Two ship in it: `aqueduct` (the default, reading `${AQUEDUCT_API_KEY}`) and `ollama` (local models, needs the Ollama service) — adapt or replace them, and point `defaultProvider` wherever you like. To use Anthropic Claude instead, switch `defaultProvider` to the built-in `anthropic` provider and set `ANTHROPIC_API_KEY`.
 

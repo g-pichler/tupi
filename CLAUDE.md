@@ -30,7 +30,8 @@ Consequences worth keeping in mind:
 - `entrypoint.sh` reconciles UIDs: it remaps the baked-in `node` user (via `usermod`/`groupmod`) to `HOST_UID`/`HOST_GID` so bind-mounted files are owned by the host user. A single user is reused, so `HOME` is always `/home/node` and host config mounts only there. If the Docker socket is mounted (opt-in, see below) it also joins that socket's group.
 - **Host Docker access is opt-in and dangerous.** The base compose does NOT mount `/var/run/docker.sock`; users opt in by enabling the unit (`./config.d.sh enable compose docker.yml`; catalog: `compose.d.available/docker.yml`). Mounting it == root on the host, and the agent runs `--dangerously-skip-permissions`. Keep the prominent security warning intact when editing the unit or README; don't quietly re-add the socket to the tracked compose file.
 - `pi-config/agent` is bind-mounted to `/pi-config` and auto-`npm install`s any `extensions/*/package.json`. `models.json` API keys support `${ENV_VAR}` interpolation (resolved by pi-coding-agent), so secrets live in `.env`, not the committed config.
-- `.env` feeds API keys into the container (see `.env.example`).
+- `.env` feeds API keys into the container (see `.env.example`). Copy `.env.example` to `.env` and fill in your keys.
+- `pi-config/agent/settings.json` holds pi agent settings. Copy `settings.json.example` to `settings.json` and customize as needed.
 - `ripgrep`/`fd-find` are installed in the image; pi-coding-agent finds them on `PATH` (it probes both `fd` and Debian's `fdfind`). Don't commit prebuilt search binaries into `pi-config/agent/bin/`.
 - User compose customizations are units too: catalog in `compose.d.available/`, enabled with `./config.d.sh enable compose <unit>`, which symlinks into the gitignored `compose.d/`. `run.sh` auto-layers every enabled `compose.d/*.yml` (sorted order) on top of the base `docker-compose.yml`. Point users there rather than editing the tracked compose file.
 
