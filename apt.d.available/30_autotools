@@ -1,0 +1,7 @@
+# Autotools / ncurses build dependencies.
+build-essential
+libncurses-dev
+autoconf
+automake
+libtool
+libtool-bin
