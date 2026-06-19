@@ -1,5 +1,6 @@
 # Crates to `cargo install`, one per line. Listing any crate bootstraps the
 # Rust toolchain during the build. Uncomment what you want:
 tokei          # fast line counter
+cargo-deny     # dependency license/advisory/ban linter
 # ripgrep        # already in the base image, but here as an example
 # typst-cli      # Typst typesetter — slow compile; the build.d binary is faster
