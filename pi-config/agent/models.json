@@ -20,7 +20,9 @@
         "supportsReasoningEffort": false,
         "supportsStrictMode": false
       },
-      "models": [{ "id": "qwen-3.5-397b" }]
+	"models": [{ "id": "qwen-3.5-397b" },
+		   { "id": "glm-5.2-744b-preview" }
+		  ]
     }
   }
 }
