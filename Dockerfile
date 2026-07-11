@@ -40,6 +40,15 @@ RUN mkdir -p /usr/local/lib/docker/cli-plugins \
 ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
 ENV PATH="/opt/cargo/bin:${PATH}"
 
+# Lean 4 (build.d bootstraps elan on demand) lives in a shared, world-readable
+# /opt/elan, same idea as /opt/cargo above: the runtime `node` user (arbitrary
+# host UID) can use lean/lake/elan with no HOME-dependent PATH/profile setup.
+# build.d/10_lean4.sh installs there with --no-modify-path; these ENVs make it
+# discoverable to every process in the image (ENV is inherited by all shells,
+# unlike /etc/profile.d which only login shells source).
+ENV ELAN_HOME=/opt/elan
+ENV PATH="/opt/elan/bin:${PATH}"
+
 # ---------------------------------------------------------------------------
 # Drop-in package layers. Each <type>.d/ holds the *enabled* units — symlinks
 # into <type>.d.available/ created by config.d.sh; install-from-dir.sh follows

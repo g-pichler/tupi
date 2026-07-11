@@ -20,8 +20,12 @@
         "supportsReasoningEffort": false,
         "supportsStrictMode": false
       },
-	"models": [{ "id": "qwen-3.5-397b" },
-		   { "id": "glm-5.2-744b-preview" }
+	"models": [{ "id": "qwen-3.5-397b",
+		     "contextWindow": 200000
+		   },
+		   { "id": "glm-5.2-744b-preview",
+		     "contextWindow": 524000
+		   }
 		  ]
     }
   }

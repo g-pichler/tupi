@@ -1,0 +1,5 @@
+# Lean 4 dependencies
+git
+curl
+gcc
+libc6-dev
