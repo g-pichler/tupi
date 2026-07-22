@@ -2,3 +2,4 @@
 unzip
 jq
 yq
+pandoc
