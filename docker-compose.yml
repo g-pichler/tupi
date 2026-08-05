@@ -7,11 +7,10 @@ services:
     volumes:
       - .:/workspace
       - ./pi-config/agent:/pi-config
+      - ./pi-config/claude:/home/node/.claude
       - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
       # entrypoint.sh remaps the single `node` user to HOST_UID, so HOME is
       # always /home/node — host config mounts there regardless of host UID.
-      - ${HOME}/.claude:/home/node/.claude
-      - ${HOME}/.claude.json:/home/node/.claude.json
       # NOTE: the host Docker socket is NOT mounted by default. Mounting it grants
       # the container root on the host — opt in by enabling the compose docker.yml
       # unit: ./config.d.sh enable compose docker.yml

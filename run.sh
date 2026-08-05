@@ -45,6 +45,17 @@ EOF
   exit 0
 fi
 
+# Fresh-clone bootstrap. Both paths are gitignored, so a new checkout lacks
+# them, and neither failure mode is obvious to the user:
+#   - missing .env           → compose aborts (docker-compose.yml env_file)
+#   - missing claude/        → Docker creates the bind-mount source as a
+#                              root-owned dir the container user can't write to
+#   - missing settings.json  → pi starts without the default provider/model
+[[ -f "$PI_HOME/.env" ]] || cp "$PI_HOME/.env.example" "$PI_HOME/.env"
+mkdir -p "$PI_HOME/pi-config/claude"
+[[ -f "$PI_HOME/pi-config/agent/settings.json" ]] \
+  || cp "$PI_HOME/pi-config/agent/settings.json.example" "$PI_HOME/pi-config/agent/settings.json"
+
 # Daily cachebust on the npm-install layer: picks up fresh
 # @anthropic-ai/claude-code / @earendil-works/pi-coding-agent once per day.
 export NPM_CACHEBUST=$(date +%Y%m%d)

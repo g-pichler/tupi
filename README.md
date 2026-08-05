@@ -4,27 +4,31 @@ Docker-based dev container bundling the [`pi-coding-agent`](https://www.npmjs.co
 
 ## Quick start
 
-1. Copy `.env.example` to `.env` and fill in API keys you want to use:
+1. Fill in the API keys you want to use in `.env` (`run.sh` copies `.env.example` over on first run; do it up front if you prefer):
    ```
    cp .env.example .env
    ```
-2. Copy `pi-config/agent/settings.json.example` to `settings.json`:
-   ```
-   cp pi-config/agent/settings.json.example pi-config/agent/settings.json
-   ```
-3. Symlink the wrapper(s) into your `PATH`:
+2. Symlink the wrapper(s) into your `PATH`:
    ```
    ln -s "$(pwd)/run.sh"     ~/bin/claude.sh
    ln -s "$(pwd)/run.sh"     ~/bin/pi.sh
    ```
-4. Run from any directory:
+3. Run from any directory:
    ```
    claude.sh          # launches Claude Code in the current cwd
    pi.sh              # launches the pi coding agent
    claude.sh --shell  # drop into bash inside the container
    ```
 
-The caller's `$(pwd)` is bind-mounted into the container at the same path and the container `cd`s into it, so relative paths Just Work. `~/.claude` and `~/.claude.json` are bind-mounted from the host, so memory, settings, and auth persist across runs and are shared with the host's Claude Code.
+On first run `run.sh` fills in the gitignored bits a fresh clone lacks: `.env` (from `.env.example`), `pi-config/agent/settings.json` (from `settings.json.example`), and the `pi-config/claude` config dir. Existing files are never overwritten — edit them freely.
+
+The caller's `$(pwd)` is bind-mounted into the container at the same path and the container `cd`s into it, so relative paths Just Work.
+
+The container's `~/.claude` comes from the repo-local `pi-config/claude` directory (gitignored, created by `run.sh` on first run), so memory, settings, and auth persist across runs while staying separate from the host's Claude Code. To share the host config instead, replace it with a symlink:
+
+```
+ln -sfn ~/.claude pi-config/claude
+```
 
 ## Entry points
 
@@ -43,10 +47,9 @@ The caller's `$(pwd)` is bind-mounted into the container at the same path and th
 A few host-side details that matter off Linux:
 
 - **Bash.** `run.sh`/`entrypoint.sh` are bash scripts. macOS ships an old bash 3.2 but the scripts stay within it. On Windows use **WSL2** and run the wrappers inside the Linux distro — that path behaves exactly like Linux. Git Bash mostly works but mangles `$(pwd)` into `/c/...` paths that break Docker volume mounts, so WSL2 is the recommended route.
-- **Bind-mounted config files must exist first.** The compose file mounts `~/.gitconfig`, `~/.claude.json`, and `~/.claude` from your host. If a file doesn't exist, Docker silently creates a *directory* in its place and the mount breaks. Pre-create them:
+- **Bind-mounted config files must exist first.** If a mount source doesn't exist, Docker silently creates a root-owned *directory* in its place and the mount breaks. `run.sh` pre-creates the repo-local ones (see [Quick start](#quick-start)), but `~/.gitconfig` is yours to provide:
   ```
-  touch ~/.gitconfig ~/.claude.json
-  mkdir -p ~/.claude
+  touch ~/.gitconfig
   ```
 - **File ownership.** `entrypoint.sh` remaps the container `node` user to your host UID/GID (`id -u`/`id -g`). On macOS Docker Desktop already translates ownership through its VM, so this is a harmless no-op; on Linux/WSL2 it's what keeps bind-mounted files owned by you.
 - **Ollama / GPU.** The Ollama profile needs an NVIDIA GPU + nvidia-container-toolkit — Linux/WSL2 only. It's off by default, so macOS and GPU-less hosts run fine; point `OLLAMA_HOST` at a host-side or remote Ollama if you want models there.
@@ -104,7 +107,7 @@ host Docker daemon, enable the unit: `./config.d.sh enable compose docker.yml`.
 
 ## Configuring the pi agent
 
-`pi-config/agent/settings.json` picks the default provider/model. Copy it from `settings.json.example` (see [Quick start](#quick-start)). Out of the box it defaults to `aqueduct` / `qwen-3.5-397b`, an OpenAI-compatible endpoint that reads `AQUEDUCT_API_KEY` from `.env` — set that key (see `.env.example`) and pi works with no further config.
+`pi-config/agent/settings.json` picks the default provider/model. It's gitignored; `run.sh` seeds it from `settings.json.example` on first run. Out of the box it defaults to `aqueduct` / `qwen-3.5-397b`, an OpenAI-compatible endpoint that reads `AQUEDUCT_API_KEY` from `.env` — set that key (see `.env.example`) and pi works with no further config.
 
 `pi-config/agent/models.json` defines the providers. API keys there support `${ENV_VAR}` interpolation, so secrets stay in `.env` rather than the committed config. Two ship in it: `aqueduct` (the default, reading `${AQUEDUCT_API_KEY}`) and `ollama` (local models, needs the Ollama service) — adapt or replace them, and point `defaultProvider` wherever you like. To use Anthropic Claude instead, switch `defaultProvider` to the built-in `anthropic` provider and set `ANTHROPIC_API_KEY`.
 
@@ -150,7 +153,7 @@ is its own layer, so editing one list only rebuilds it and the layers below.
 
 ## Container layout
 
-- `entrypoint.sh` reconciles UIDs: it remaps the baked-in `node` user (via `usermod`/`groupmod`) to `HOST_UID`/`HOST_GID` so files written to the bind mounts are owned by you on the host. Because a single user is reused, `HOME` is always `/home/node`, so host config (`.claude`, `.gitconfig`, …) is bind-mounted only there. If the Docker socket is mounted (opt-in — see [Host Docker access](#️-host-docker-access-opt-in)) it also joins that socket's group.
+- `entrypoint.sh` reconciles UIDs: it remaps the baked-in `node` user (via `usermod`/`groupmod`) to `HOST_UID`/`HOST_GID` so files written to the bind mounts are owned by you on the host. Because a single user is reused, `HOME` is always `/home/node`, so config (`.claude` from `pi-config/claude`, `.gitconfig` from the host, …) is bind-mounted only there. If the Docker socket is mounted (opt-in — see [Host Docker access](#️-host-docker-access-opt-in)) it also joins that socket's group.
 - `pi-config/agent` is bind-mounted to `/pi-config` and auto-`npm install`s any `extensions/*/package.json`.
 - `.env` feeds API keys into the container (see `.env.example`).
 

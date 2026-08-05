@@ -28,9 +28,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf "$(command -v fdfind)" /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
 
-# Docker Compose v2 plugin (docker.io apt pkg ships the CLI only)
-RUN mkdir -p /usr/local/lib/docker/cli-plugins \
-    && curl -fsSL "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+# Docker Compose v2 plugin (docker.io apt pkg ships the CLI only). The release
+# asset is named by machine arch, so map from the build arch rather than
+# hardcoding x86_64 — otherwise the build pulls an amd64 binary on Apple
+# Silicon. BuildKit sets TARGETARCH automatically; dpkg is the fallback for a
+# legacy non-BuildKit build, where it's unset.
+ARG TARGETARCH
+RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}" \
+    && case "$arch" in \
+         amd64) compose_arch=x86_64 ;; \
+         arm64) compose_arch=aarch64 ;; \
+         *) echo "unsupported arch for docker compose plugin: $arch" >&2; exit 1 ;; \
+       esac \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -fsSL "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-${compose_arch}" \
        -o /usr/local/lib/docker/cli-plugins/docker-compose \
     && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
@@ -101,6 +112,9 @@ RUN git config --system safe.directory '*'
 ARG NPM_CACHEBUST=0
 RUN echo "cachebust=${NPM_CACHEBUST}" \
     && npm install -g @earendil-works/pi-coding-agent @anthropic-ai/sdk @anthropic-ai/claude-code
+
+# claude config symlink
+RUN ln -s '/home/node/.claude/.claude.json' '/home/node/.claude.json'
 
 # entrypoint.sh last so editing it only invalidates this cheap COPY.
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

@@ -9,7 +9,7 @@ This repo is dogfed: when you (Claude) are editing files here, you are almost ce
 Consequences worth keeping in mind:
 - Don't assume a tool is missing just because `which` fails in the current shell — check the `Dockerfile` first; it may have been added after this container started.
 - `/workspace` and the host cwd are both bind-mounted, so edits here are visible to the host immediately.
-- `~/.claude` and `~/.claude.json` are bind-mounted from the host, so your memory, settings, and auth persist across container runs and are shared with the host's Claude Code.
+- The container's `~/.claude` is bind-mounted from the **repo-local** `pi-config/claude` (gitignored; `run.sh` creates it on first run), so the sandbox keeps its own memory, settings, and auth — persistent across runs, but separate from the host's Claude Code. Point it at the host config by making `pi-config/claude` a symlink to `~/.claude`. `~/.claude.json` is a symlink baked into the image (→ `~/.claude/.claude.json`), which `entrypoint.sh` seeds with a `{}` stub if absent.
 
 ## Entry points
 
@@ -30,8 +30,8 @@ Consequences worth keeping in mind:
 - `entrypoint.sh` reconciles UIDs: it remaps the baked-in `node` user (via `usermod`/`groupmod`) to `HOST_UID`/`HOST_GID` so bind-mounted files are owned by the host user. A single user is reused, so `HOME` is always `/home/node` and host config mounts only there. If the Docker socket is mounted (opt-in, see below) it also joins that socket's group.
 - **Host Docker access is opt-in and dangerous.** The base compose does NOT mount `/var/run/docker.sock`; users opt in by enabling the unit (`./config.d.sh enable compose docker.yml`; catalog: `compose.d.available/docker.yml`). Mounting it == root on the host, and the agent runs `--dangerously-skip-permissions`. Keep the prominent security warning intact when editing the unit or README; don't quietly re-add the socket to the tracked compose file.
 - `pi-config/agent` is bind-mounted to `/pi-config` and auto-`npm install`s any `extensions/*/package.json`. `models.json` API keys support `${ENV_VAR}` interpolation (resolved by pi-coding-agent), so secrets live in `.env`, not the committed config.
-- `.env` feeds API keys into the container (see `.env.example`). Copy `.env.example` to `.env` and fill in your keys.
-- `pi-config/agent/settings.json` holds pi agent settings. Copy `settings.json.example` to `settings.json` and customize as needed.
+- `.env` feeds API keys into the container (see `.env.example`); `run.sh` copies the example over on first run, so users just fill in keys.
+- `pi-config/agent/settings.json` holds pi agent settings. Gitignored; `run.sh` seeds it from `settings.json.example` on first run (along with `.env` and `pi-config/claude`) — never overwriting an existing file.
 - `ripgrep`/`fd-find` are installed in the image; pi-coding-agent finds them on `PATH` (it probes both `fd` and Debian's `fdfind`). Don't commit prebuilt search binaries into `pi-config/agent/bin/`.
 - User compose customizations are units too: catalog in `compose.d.available/`, enabled with `./config.d.sh enable compose <unit>`, which symlinks into the gitignored `compose.d/`. `run.sh` auto-layers every enabled `compose.d/*.yml` (sorted order) on top of the base `docker-compose.yml`. Point users there rather than editing the tracked compose file.
 

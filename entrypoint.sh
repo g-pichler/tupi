@@ -2,6 +2,16 @@
 set -e
 
 PI_DIR="${PI_CODING_AGENT_DIR:-/pi-config}"
+CLAUDE_DIR=/home/node/.claude
+
+# Claude Code refuses to start without ~/.claude.json (the image symlinks it to
+# $CLAUDE_DIR/.claude.json). mkdir guards the case where the config mount is
+# absent entirely — without it `set -e` would kill the container here.
+mkdir -p "$CLAUDE_DIR"
+if [[ ! -f "$CLAUDE_DIR/.claude.json" ]]; then
+    # Create a stub claude config if it does not exist yet
+    echo '{}' >"$CLAUDE_DIR/.claude.json"
+fi
 
 # Install dependencies for any pi extensions that have a package.json
 for pkg in "$PI_DIR"/extensions/*/package.json; do
@@ -41,8 +51,16 @@ if [ "$(id -u)" = "0" ] && [ -n "$HOST_UID" ]; then
     usermod -aG dockerhost "$PI_USER"
   fi
 
-  find "$PI_HOME" -not -path "$PI_HOME/.gitconfig" -not -path "$PI_HOME/.claude*" -exec chown "$HOST_UID:$TARGET_GID" {} +
+  # Chown HOME, pruning two bind mounts: .gitconfig is mounted read-only (chown
+  # would fail), and .claude's *contents* are the host's config tree — big
+  # (history.jsonl, projects/) and already host-owned, so walking it every start
+  # is pure cost. The .claude dir itself is NOT pruned: on a fresh clone Docker
+  # creates that mount source root-owned, and the container user must be able to
+  # create sessions/, projects/, … inside it.
+  find "$PI_HOME" \( -path "$PI_HOME/.claude/*" -o -path "$PI_HOME/.gitconfig" \) -prune \
+       -o -exec chown "$HOST_UID:$TARGET_GID" {} +
   chown -R "$HOST_UID:$TARGET_GID" "$PI_DIR"
+  chown "$HOST_UID:$TARGET_GID" "$CLAUDE_DIR/.claude.json"
 
   # Rust lives in world-readable /opt/{cargo,rustup} (see Dockerfile /
   # install-from-dir.sh), already on the image's ENV PATH — no per-start copy
