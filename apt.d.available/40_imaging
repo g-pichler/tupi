@@ -1,0 +1,17 @@
+# Image processing toolbox — raw development (incl. Nikon NEF) + raster tools.
+#
+# Raw / NEF developers:
+darktable                # raw developer; `darktable-cli` exports NEF headlessly (GUI: `darktable`)
+rawtherapee               # alternative raw developer; `rawtherapee-cli` headless export
+libraw-bin                # LibRaw CLI: `raw-identify`, `dcraw_emu`, `unprocessed_raw`
+dcraw                     # classic `dcraw` raw decoder (NEF-aware) + Fuji helpers
+#
+# Raster manipulation & metadata:
+imagemagick               # `convert`, `identify`, `mogrify`, `montage`, ...
+libimage-exiftool-perl    # `exiftool` — read/write EXIF/IPTC/XMP metadata
+exiftran                  # lossless JPEG rotation/crop
+#
+# Lossless optimizers:
+jpegoptim
+optipng
+pngcrush

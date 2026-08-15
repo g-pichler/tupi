@@ -25,6 +25,9 @@
 		   },
 		   { "id": "glm-5.2-744b-preview",
 		     "contextWindow": 524000
+		   },
+		   {
+		       "id": "deepseek-v4-flash-284b"
 		   }
 		  ]
     }

@@ -1,6 +1,6 @@
 # TUpi sandbox
 
-Docker-based dev container bundling the [`pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), Claude Code, and the Anthropic SDK on a lean core (Node, git, build tools, Python 3, ripgrep/fd). Heavier tooling — TeX Live, OCR, Rust, Typst, Soufflé, the scientific Python stack — is opt-in via drop-in package lists (see [Adding tools to the image](#adding-tools-to-the-image)). An optional GPU-backed Ollama service is wired up via `docker-compose`.
+Docker-based dev container bundling the [`pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), Claude Code, and the Anthropic SDK on a lean core (Node, git, build tools, Python 3, ripgrep/fd). Heavier tooling — TeX Live, OCR, image processing / raw development (darktable, NEF support), Rust, Typst, Soufflé, the scientific Python stack — is opt-in via drop-in package lists (see [Adding tools to the image](#adding-tools-to-the-image)). An optional GPU-backed Ollama service is wired up via `docker-compose`.
 
 ## Quick start
 
@@ -138,7 +138,9 @@ Within a unit, one package name per line and `#` starts a comment; `build` units
 are shell scripts (use them for anything a package manager can't express — binary
 downloads, third-party apt repos — they run as root during the build). Units
 apply in **filename-sort order** (e.g. `00_texlive` before `20_ocr`). The catalog
-ships TeX Live, the OCR stack, the scientific Python set, and `build` scripts for
+ships TeX Live, the OCR stack, an image-processing/raw-development toolbox
+(darktable, RawTherapee, LibRaw, dcraw, ImageMagick, exiftool — handles Nikon
+NEF and other raw formats), the scientific Python set, and `build` scripts for
 Soufflé, Typst, and the Gitea CLI; to add your own, drop a file in the relevant
 `*.d.available/` and enable it.
 
