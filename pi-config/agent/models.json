@@ -27,7 +27,8 @@
 		     "contextWindow": 524000
 		   },
 		   {
-		       "id": "deepseek-v4-flash-284b"
+		       "id": "deepseek-v4-flash-284b",
+		       "contextWindow": 393216
 		   }
 		  ]
     }
