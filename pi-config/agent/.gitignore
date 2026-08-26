@@ -2,3 +2,4 @@ sessions/
 auth.json
 settings.json
 trust.json
+models-store.json

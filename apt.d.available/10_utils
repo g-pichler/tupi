@@ -3,3 +3,4 @@ unzip
 jq
 yq
 pandoc
+vim-common
