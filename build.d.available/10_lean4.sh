@@ -17,10 +17,10 @@ export ELAN_HOME
 
 # Install elan + default toolchain into the shared home. --no-modify-path: the
 # Dockerfile owns PATH; don't let elan edit shell rc files. Pinned to
-# leanprover/lean4:4.32.2 rather than `stable` so builds are reproducible.
+# leanprover/lean4:4.32.0 rather than `stable` so builds are reproducible.
 # Bump this intentionally; otherwise elan follows the moving `stable` channel.
 curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf \
-  | sh -s -- -y --no-modify-path --default-toolchain leanprover/lean4:4.32.2
+  | sh -s -- -y --no-modify-path --default-toolchain leanprover/lean4:4.32.0
 
 # Materialise the default toolchain into the layer so the first runtime
 # lean/lake invocation doesn't trigger a download (and fails the build now if
