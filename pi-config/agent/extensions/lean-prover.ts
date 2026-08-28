@@ -6,8 +6,10 @@
  *      "mentor" model M (may be the same).
  *   2. P produces a proof plan.
  *   3. P attempts the proof by editing the workspace and running `lake build`.
- *   4. Robust verification: `lake build` succeeds AND no declaration in the
- *      workspace depends on `sorryAx` (Lean-native, whole-module scan).
+ *   4. Robust verification: `lake build` succeeds AND the named theorem does
+ *      not depend on `sorryAx` (Lean-native, single-declaration check).
+ *      The theorem must be named; it must exist; and it must still contain a
+ *      sorry at the start (pre-flight) or the command fails fast.
  *   5. M reviews P's state / Lean errors and either guides P, declares no
  *      progress (b), or requests user interaction (c).
  *   6. Loop until: (a) proved without sorryAx, (b) M declares no progress,
@@ -29,8 +31,6 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
   detectWorkspace,
   verifyWorkspace,
-  gatherProjectLeanFiles,
-  formatLeanContext,
   type DetectedWorkspace,
 } from "/pi-config/src/lean-workspace.ts";
 
@@ -179,7 +179,12 @@ async function runPi({
 	};
 
 	const exitCode = await new Promise<number>((resolve) => {
-		const proc = spawn(command, finalArgs, {
+		let proc: ReturnType<typeof spawn>;
+		// spawn() throws synchronously for arg/env-size overflow (spawn E2BIG);
+		// wrap it so that path degrades to a failed run instead of crashing the
+		// whole extension.
+		try {
+			proc = spawn(command, finalArgs, {
 			cwd,
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],
@@ -225,6 +230,10 @@ async function runPi({
 			console.error("spawn error:", err);
 			resolve(1);
 		});
+		} catch (err) {
+			console.error("spawn failed:", err);
+			resolve(1);
+		}
 	});
 	if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
 
@@ -252,14 +261,30 @@ the final proof.`;
 const MENTOR_SYSTEM = `You are the MENTOR in a Lean 4 proving assistant. You may only READ files and
 run read-only bash. The PROVER is trying to prove a theorem. You review the
 prover's latest plan/proof, the current Lean source, and any build errors, then
-give strategic guidance (lemmas, restructuring, simpler path). Reply with
-STRICT JSON only, no prose before/after:
+give strategic guidance (lemmas, restructuring, simpler path).
 
-{"status":"continue"|"stuck"|"need_user","advice":"...","reason":"..."}
+IMPORTANT: Be reluctant to declare "stuck". Difficult conjectures require
+persistent exploration. Encourage honest tries, even if they fail — failed
+attempts often reveal useful structure. Partial progress is valuable and
+acceptable. Only declare "stuck" after genuine exhaustion of reasonable
+approaches.
+
+Rate the current state (partial or final) on this scale:
+- A: Complete; Lean verified (no sorry/admit/sorryAx)
+- B1-B10: Paper proof done; 1-10 indicates formalization progress in Lean
+- C1-C10: Numerically verified or partially on-paper; 1-10 indicates confidence
+- D: Guess (no substantial evidence)
+
+Label sub-results and partial results with this rating scale in your "reason"
+field (e.g., "Lemma X: B7, Lemma Y: C4, Main theorem: C2").
+
+Reply with STRICT JSON only, no prose before/after:
+
+{"status":"continue"|"stuck"|"need_user","rating":"A"|"B1"-"B10"|"C1"-"C10"|"D","advice":"...","reason":"..."}
 
 status meanings:
 - "continue": give "advice" for the next prover round.
-- "stuck": no progress can be made (terminate work).
+- "stuck": no progress can be made (terminate work; use sparingly).
 - "need_user": human input required; put your question in "advice".`;
 
 // ---------------------------------------------------------------------------
@@ -270,7 +295,12 @@ export default function (pi: ExtensionAPI) {
 	pi.registerCommand("prove", {
 		description: "Run the mentor/prover loop against a Lean theorem in the workspace.",
 		handler: async (args, ctx) => {
+			// The theorem to prove is REQUIRED (no more "prove everything").
 			const theorem = (args || "").trim();
+			if (!theorem) {
+				ctx.ui.notify("No theorem named. Usage: /prove <theorem-name>", "error");
+				return;
+			}
 
 			// 0. Detect + validate the Lean workspace.
 			let ws: DetectedWorkspace;
@@ -347,6 +377,37 @@ export default function (pi: ExtensionAPI) {
 				return r;
 			};
 
+			// 1.5 Pre-flight: the named theorem must exist and still contain a
+			// sorry. Fail fast otherwise (before spending any tokens on P/M).
+			currentPhase = "verify: pre-flight";
+			renderWidget();
+			const preflight = await verifyWorkspace(ws, theorem);
+			if (preflight.status === "not-found") {
+				ctx.ui.setWidget(WIDGET, []);
+				ctx.ui.notify(
+					`Theorem "${theorem}" was not found in the built workspace. Aborting.`,
+					"error",
+				);
+				return;
+			}
+			if (preflight.status === "proved") {
+				ctx.ui.setWidget(WIDGET, []);
+				ctx.ui.notify(
+					`Theorem "${theorem}" has no sorry left — nothing to prove. Aborting.`,
+					"error",
+				);
+				return;
+			}
+			if (preflight.status !== "unproved") {
+				ctx.ui.setWidget(WIDGET, []);
+				ctx.ui.notify(`Pre-flight check failed: ${preflight.detail}`, "error");
+				return;
+			}
+			ctx.ui.notify(
+				`Pre-flight OK: "${theorem}" exists and is unproved (has sorry). Proving...`,
+				"info",
+			);
+
 			// 2. Initial task: P produces a PLAN first (per spec).
 			ctx.ui.setStatus("lean-prover", `${mentorModel} / ${proverModel}`);
 			currentPhase = "P: planning";
@@ -356,15 +417,28 @@ export default function (pi: ExtensionAPI) {
 				tools: proverTools,
 				systemPrompt: PROVER_SYSTEM,
 				task:
-					`Produce a step-by-step PLAN to prove:\n\n${theorem || "(see workspace theorem comments)"}\n\n` +
-					`Relevant workspace:\n${formatLeanContext(gatherProjectLeanFiles(cwd))}\n\n` +
-					`Do not edit yet; output only the plan plus the lemmas you expect to need.`,
+					`Produce a step-by-step PLAN to prove:\n\n${theorem}\n\n` +
+					`Explore the workspace: list the .lean files, open the ones relevant to this ` +
+					`theorem, and see what's already defined. Output only the plan plus the lemmas ` +
+					`you expect to need. Do not edit any files yet.`,
 				cwd,
 			});
 			const planShort = initialPlan.output.trim().split(/\s+/).slice(0, 20).join(" ") || "(no text)";
 			lastSnippet = planShort;
 
 			let plan = initialPlan.output;
+			const planFile = path.join(cwd, "prove-plan.md");
+			// Persist the plan to the workspace so it can be read standalone while
+			// /prove runs (and survives a terminal/extension crash). Updated every
+			// time the plan changes (mentor/user guidance replaces it).
+			const savePlan = () => {
+				try {
+					fs.writeFileSync(planFile, `# Proof plan\n\n${plan}\n`);
+				} catch (e) {
+					console.error("lean-prover: failed to persist plan:", e);
+				}
+			};
+			savePlan();
 			let lastProof = "";
 			let finalVerify: Awaited<ReturnType<typeof verifyWorkspace>> | null = null;
 			let outcome: "proved" | "mentor-stuck" | "mentor-wants-user" | "rounds-exhausted" =
@@ -382,11 +456,11 @@ export default function (pi: ExtensionAPI) {
 					tools: proverTools,
 					systemPrompt: PROVER_SYSTEM,
 					task:
-						`Prove:\n\n${theorem || "(prove all theorems found in the workspace)"}\n\n` +
+						`Prove:\n\n${theorem}\n\n` +
 						`Plan (from prior round):\n${plan}\n\n` +
-						`Current workspace:\n${formatLeanContext(gatherProjectLeanFiles(cwd))}\n\n` +
-						`Edit the Lean files and iterate with 'lake build' until the workspace compiles with ` +
-						`no sorry/sorryAx/admit anywhere. Then summarize your final proof.`,
+						`Find and read the relevant .lean files in the workspace, then edit them and ` +
+						`iterate with 'lake build' until the workspace compiles with no sorry/sorryAx/admit ` +
+						`anywhere. Then summarize your final proof.`,
 					cwd,
 				});
 				lastProof = proverRun.output;
@@ -394,7 +468,7 @@ export default function (pi: ExtensionAPI) {
 				// 4. Robust verification.
 				currentPhase = "verify: lake build + sorryAx scan";
 				renderWidget();
-				finalVerify = await verifyWorkspace(ws);
+				finalVerify = await verifyWorkspace(ws, theorem);
 				if (finalVerify.status === "proved") {
 					outcome = "proved";
 					roundsProvedIn = currentRound;
@@ -405,8 +479,8 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				const leanState =
-					`Robust check: ${finalVerify.status} — ${finalVerify.detail}\n\n` +
-					`Current workspace:\n${formatLeanContext(gatherProjectLeanFiles(cwd))}`;
+					`Robust check: ${finalVerify.status} — ${finalVerify.detail}. ` +
+					`Inspect the workspace .lean files yourself to review the prover's work.`;
 
 				// 5. M reviews and decides.
 				currentPhase = `M: reviewing (round ${currentRound})`;
@@ -425,14 +499,17 @@ export default function (pi: ExtensionAPI) {
 				});
 
 				let status = "continue";
+				let rating: string | null = null;
 				let advice = mentorRun.output;
 				try {
 					const parsed = JSON.parse(mentorRun.output.trim());
 					status = parsed.status || "continue";
+					rating = parsed.rating || null;
 					advice = parsed.advice || parsed.reason || "";
 				} catch {
 					status = "continue";
 				}
+				if (rating) ctx.ui.notify(`Mentor rating: ${rating}`, "info");
 
 				if (status === "stuck") {
 					outcome = "mentor-stuck";
@@ -444,10 +521,12 @@ export default function (pi: ExtensionAPI) {
 						advice || "What should the prover do?",
 					);
 					plan = `Mentor asked the user. User guidance:\n${answer}\n\nMentor advice:\n${advice}`;
+					savePlan();
 					continue;
 				}
 
 				plan = `Mentor guidance for round ${currentRound + 1}:\n${advice}`;
+				savePlan();
 			}
 
 			const details = finalVerify && finalVerify.detail ? `\n${finalVerify.detail}` : "";

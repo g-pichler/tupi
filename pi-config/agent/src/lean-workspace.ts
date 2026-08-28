@@ -8,11 +8,11 @@
  * Robust verification strategy ("proved without sorryAx"):
  *   1. `lake build` must succeed (whole project compiles).
  *   2. Generate a temporary check file that imports the workspace modules and
- *      runs a whole-module scan using Lean's own `Lean.collectAxioms`, reporting
- *      any declaration that transitively depends on the `sorryAx` axiom
- *      (covers `sorry`, `admit`, `by ... gap`, and direct `sorryAx`).
- *   3. `lake env lean <check>` returns "NO_SORRY" => proved; "SORRY:<names>" =>
- *      still contains a sorry.
+ *      uses Lean's own `Lean.collectAxioms` to test ONE named theorem: does it
+ *      transitively depend on the `sorryAx` axiom (covers `sorry`, `admit`,
+ *      `by ... gap`, and direct `sorryAx`)?
+ *   3. `lake env lean <check>` returns "NOT_FOUND" (no such declaration),
+ *      "SORRY" (still depends on sorryAx), or "NO_SORRY" (proved).
  */
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
@@ -37,7 +37,7 @@ export interface DetectedWorkspace {
 }
 
 export interface VerifyResult {
-  status: "proved" | "unproved" | "build-error" | "check-error" | "not-workspace";
+  status: "proved" | "unproved" | "not-found" | "build-error" | "check-error" | "not-workspace";
   detail: string;
   offenders: string[];
   hadSorryAx: boolean;
@@ -185,7 +185,7 @@ export async function buildWorkspace(ws: DetectedWorkspace): Promise<string | nu
   return r.all || `lake build failed with exit code ${r.code}`;
 }
 
-const CHECK_TEMPLATE = (modules: string[]) => `
+const CHECK_TEMPLATE = (modules: string[], target: string) => `
 import Lean
 ${modules.map((m) => `import ${m}`).join("\n")}
 
@@ -193,29 +193,33 @@ open Lean
 
 #eval show CoreM String from do
   let env ← getEnv
-  let mut bad : Array Name := #[]
-  for (n, _) in env.constants do
-    if n != \`\`sorryAx && (← Lean.collectAxioms n).contains \`\`sorryAx then
-      bad := bad.push n
-  if bad.isEmpty then
-    return "RESULT:NO_SORRY"
+  let n : Name := \`${target}
+  if !(env.constants.contains n) then
+    return "RESULT:NOT_FOUND"
+  else if (← Lean.collectAxioms n).contains \`sorryAx then
+    return "RESULT:SORRY"
   else
-    return "RESULT:SORRY:" ++ String.intercalate "," (bad.toList.map (fun n => n.toString))
+    return "RESULT:NO_SORRY"
 `;
 
-function parseCheckOutput(output: string): { offenders: string[]; hadSorryAx: boolean } {
-  const m = output.match(/RESULT:(?:NO_SORRY|SORRY:(.*))/);
-  if (!m) return { offenders: [], hadSorryAx: false };
-  if (m[1] === undefined) return { offenders: [], hadSorryAx: false };
-  // The #eval prints the String repr (wrapped in quotes); strip them.
-  const list = m[1].replace(/"/g, "").trim();
-  return { offenders: list.split(",").map((s) => s.trim()).filter(Boolean), hadSorryAx: true };
+function parseCheckOutput(
+  output: string,
+): { status: "proved" | "unproved" | "not-found" | "unknown"; offenders: string[]; hadSorryAx: boolean } {
+  const m = output.match(/RESULT:(NOT_FOUND|NO_SORRY|SORRY)/);
+  if (!m) return { status: "unknown", offenders: [], hadSorryAx: false };
+  if (m[1] === "NOT_FOUND") return { status: "not-found", offenders: [], hadSorryAx: false };
+  if (m[1] === "SORRY") return { status: "unproved", offenders: [], hadSorryAx: true };
+  return { status: "proved", offenders: [], hadSorryAx: false };
 }
 
 /**
- * Robustly verify that the workspace builds and contains no `sorryAx` usage.
+ * Verify ONE named theorem in the workspace:
+ *  - `lake build` must succeed (whole project compiles so the declaration
+ *    exists in the built modules),
+ *  - the named theorem must exist (NOT_FOUND otherwise),
+ *  - status is "unproved" if it still depends on `sorryAx`, "proved" if not.
  */
-export async function verifyWorkspace(ws: DetectedWorkspace): Promise<VerifyResult> {
+export async function verifyWorkspace(ws: DetectedWorkspace, theorem: string): Promise<VerifyResult> {
   const buildErr = await buildWorkspace(ws);
   if (buildErr) {
     return { status: "build-error", detail: buildErr, offenders: [], hadSorryAx: false };
@@ -233,26 +237,39 @@ export async function verifyWorkspace(ws: DetectedWorkspace): Promise<VerifyResu
     os.tmpdir(),
     `lean-prover-check-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.lean`,
   );
-  fs.writeFileSync(checkPath, CHECK_TEMPLATE(modules));
+  fs.writeFileSync(checkPath, CHECK_TEMPLATE(modules, theorem));
   try {
     const r = await runCommand(ws.root, "lake", ["env", "lean", checkPath]);
     const parsed = parseCheckOutput(r.all);
-    const hasLeanStartupError = /error:/i.test(r.all) && !parsed.hadSorryAx;
-    if (hasLeanStartupError) {
+    if (parsed.status === "unknown") {
       return {
         status: "check-error",
-        detail: r.all.slice(0, 4000) || "check file failed unexpectedly",
-        offenders: parsed.offenders,
-        hadSorryAx: parsed.hadSorryAx,
+        detail: r.all.slice(0, 4000) || `lean check produced no RESULT marker (exit ${r.code})`,
+        offenders: [],
+        hadSorryAx: false,
+      };
+    }
+    if (parsed.status === "not-found") {
+      return {
+        status: "not-found",
+        detail: `Theorem '${theorem}' was not found in the built workspace (no such declaration).`,
+        offenders: [],
+        hadSorryAx: false,
+      };
+    }
+    if (parsed.status === "unproved") {
+      return {
+        status: "unproved",
+        detail: `'${theorem}' still depends on 'sorryAx' (sorry/admit/gap not yet resolved).`,
+        offenders: [theorem],
+        hadSorryAx: true,
       };
     }
     return {
-      status: parsed.hadSorryAx ? "unproved" : "proved",
-      detail: parsed.hadSorryAx
-        ? `Still depends on 'sorryAx': ${parsed.offenders.join(", ")}`
-        : "Workspace builds cleanly with no 'sorryAx' usage.",
-      offenders: parsed.offenders,
-      hadSorryAx: parsed.hadSorryAx,
+      status: "proved",
+      detail: `'${theorem}' builds sorry-free (no 'sorryAx' dependency).`,
+      offenders: [],
+      hadSorryAx: false,
     };
   } finally {
     try {
