@@ -3,3 +3,6 @@ auth.json
 settings.json
 trust.json
 models-store.json
+# Private per-user content: prompt templates, auto-installed packages
+prompts/
+npm/
