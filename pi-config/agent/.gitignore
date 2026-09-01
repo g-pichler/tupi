@@ -3,3 +3,10 @@ auth.json
 settings.json
 trust.json
 models-store.json
+
+# Private pi bits (extensions, prompts, shared src). Kept out of the repo and
+# mounted back in at runtime from ~/Sync/pi-private via compose.d.available/private.yml.
+# Guard them here so they can never be accidentally committed even if present.
+extensions/
+prompts/
+src/

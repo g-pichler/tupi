@@ -1,0 +1,24 @@
+# Compose override: mount PRIVATE pi extensions/prompts/src from outside the
+# (public) repo, so they never get committed or pushed to GitHub.
+#
+# Private pi config lives at ${HOME}/Sync/pi-private/agent/... on the host —
+# mirroring this repo's existing private-Claude convention (~/Sync/claude).
+# Those files are NOT in the repo and are gitignored; this unit overlays them
+# onto the base ./pi-config/agent:/pi-config mount so pi still sees them.
+#
+# The dirs are mounted individually because the base file binds the whole
+# ./pi-config/agent dir; a symlink *inside* that dir to a host path would not
+# resolve inside the container (bind mounts don't follow host-absolute links
+# once traversed), so each private subpath gets its own bind mount here, on
+# top of the shared one (later mounts override).
+#
+# If any of these dirs are missing, the agent simply runs without them.
+#
+# To use: enable with  ./config.d.sh enable compose private
+# then rerun pi.sh / claude.sh. Do NOT put private files directly in the repo.
+services:
+  pi:
+    volumes:
+      - ${HOME}/Sync/pi-private/agent/extensions:/pi-config/extensions
+      - ${HOME}/Sync/pi-private/agent/prompts:/pi-config/prompts
+      - ${HOME}/Sync/pi-private/agent/src:/pi-config/src
