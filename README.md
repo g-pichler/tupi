@@ -144,6 +144,30 @@ NEF and other raw formats), the scientific Python set, and `build` scripts for
 Soufflé, Typst, and the Gitea CLI; to add your own, drop a file in the relevant
 `*.d.available/` and enable it.
 
+**TeX Live versions are configurable.** The default `apt 00_texlive` unit ships
+the Debian release (bookworm = TeX Live 2022, biber 2.18, forever). To get the
+current release with a self-consistent pdflatex/biber/biblatex set instead,
+leave that apt unit disabled and use the upstream installer, baked in via a
+dedicated image `build` STAGE (`build.d.available/50_texlive.sh`) that installs
+teX Live from tug.org into `/opt/texlive` and symlinks its binaries into
+`/usr/local/bin`:
+
+```
+./config.d.sh disable apt 00_texlive
+```
+
+Then rebuild. Release year, install scheme (`scheme-full` default), and mirror
+are set by variables at the top of `build.d.available/50_texlive.sh`
+(`TEXLIVE_YEAR`/`TEXLIVE_SCHEME`/`TEXLIVE_MIRROR`); after install you can pin any
+package with `tlmgr install <pkg>@<rev>` / `tlmgr update --all` (e.g. a specific
+biber), and it persists in `/opt/texlive`.
+
+Because it lives in its own multi-stage image, the multi-GB TeX Live download
+happens **once** and is cached forever: the daily npm CLI refresh, apt/python/
+rust list edits, and changes to other build scripts never invalidate it, so
+rebuilds COPY it from the cached stage locally instead of re-downloading (~30
+min). Only editing `50_texlive.sh` (or the lean core below the COPY) rebuilds it.
+
 Build-time units (apt/python/rust/build) take effect on the next image build —
 rebuild with `docker compose build` (or just rerun `claude.sh`). Compose overrides
 are units too, managed the same way (`./config.d.sh enable compose <unit>`); they

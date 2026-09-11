@@ -72,7 +72,7 @@ for extra in "$PI_HOME"/compose.d/*.yml; do
   [[ -f "$extra" ]] && COMPOSE+=(-f "$extra")
 done
 
-RUN=(run --rm --build -v "$(pwd):$(pwd)" -w "$(pwd)")
+RUN=(run --rm -v "$(pwd):$(pwd)" -w "$(pwd)")
 
 if [[ "$1" == "--shell" ]]; then
   shift

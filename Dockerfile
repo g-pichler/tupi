@@ -1,5 +1,28 @@
 # syntax=docker/dockerfile:1
 # (enables RUN --mount=type=cache; needs BuildKit, the docker/compose default.)
+
+# ---------------------------------------------------------------------------
+# TeX Live — dedicated STAGE. The multi-GB upstream install is downloaded ONCE
+# and cached forever, fully isolated from every other layer: bumping the npm
+# CLIs (daily cachebust), editing apt/python/rust lists, or touching any other
+# build.d script cannot invalidate it, so rebuilds never re-download TeX Live
+# (~30 min) — it is COPYed into the final image as a cheap, local step.
+# Version/scheme/mirror are configurable in the tracked
+# build.d.available/50_texlive.sh (TEXLIVE_YEAR / TEXLIVE_SCHEME / TEXLIVE_MIRROR)
+# — edit + rebuild. Alternative to the distro `apt 00_texlive` unit (leave that
+# one disabled; upstream symlinks on /usr/local/bin shadow /usr/bin anyway).
+# ---------------------------------------------------------------------------
+FROM node:22-slim AS texlive
+# node slim ships neither perl nor curl; install-tl needs perl, curl fetches it.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl perl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY build.d.available/50_texlive.sh /usr/local/bin/texlive-install.sh
+RUN bash /usr/local/bin/texlive-install.sh
+
+# ===========================================================================
+# Main image.
+# ===========================================================================
 FROM node:22-slim
 
 ARG COMPOSE_VERSION=2.32.4
@@ -27,6 +50,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fd-find \
     && ln -sf "$(command -v fdfind)" /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
+
+# Bring the cached TeX Live into the final image. Placed as LOW as possible so
+# only the lean core below can invalidate it — apt/python/rust/build/npm
+# changes (all above) never re-copy or re-download it.
+COPY --from=texlive /opt/texlive /opt/texlive
+# Expose TeX Live binaries on PATH for all users. /usr/local/bin precedes
+# /usr/bin, so these win over any distro tools. Idempotent, cheap to redo.
+RUN for b in /opt/texlive/*/bin/*/*; do \
+      [ -f "$b" ] && [ -x "$b" ] && ln -sf "$b" "/usr/local/bin/$(basename "$b")"; \
+    done
 
 # Docker Compose v2 plugin (docker.io apt pkg ships the CLI only). The release
 # asset is named by machine arch, so map from the build arch rather than
