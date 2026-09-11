@@ -2,23 +2,41 @@
 # (enables RUN --mount=type=cache; needs BuildKit, the docker/compose default.)
 
 # ---------------------------------------------------------------------------
-# TeX Live — dedicated STAGE. The multi-GB upstream install is downloaded ONCE
-# and cached forever, fully isolated from every other layer: bumping the npm
-# CLIs (daily cachebust), editing apt/python/rust lists, or touching any other
-# build.d script cannot invalidate it, so rebuilds never re-download TeX Live
-# (~30 min) — it is COPYed into the final image as a cheap, local step.
-# Version/scheme/mirror are configurable in the tracked
-# build.d.available/50_texlive.sh (TEXLIVE_YEAR / TEXLIVE_SCHEME / TEXLIVE_MIRROR)
-# — edit + rebuild. Alternative to the distro `apt 00_texlive` unit (leave that
-# one disabled; upstream symlinks on /usr/local/bin shadow /usr/bin anyway).
+# Upstream TeX Live — opt-in, in its own STAGES. Enable with
+# `./config.d.sh enable build 50_texlive.sh`; disabled, these stages produce an
+# empty /opt/texlive and cost nothing. Enabled, the multi-GB install is
+# downloaded ONCE and cached, isolated from every other layer: the daily npm
+# cachebust, apt/python/rust edits, and other build.d units can't invalidate
+# it, so rebuilds never re-download TeX Live (~30 min). Release/scheme/mirror
+# are set in build.d.available/50_texlive.sh. Alternative to the distro
+# `apt 00_texlive` unit — enable one or the other, not both.
+#
+# texlive-toggle turns "is the unit enabled?" into a file: /out holds the
+# script if enabled, nothing otherwise. It reruns (cheaply) whenever build.d
+# changes, but the COPY --from below is keyed on /out's CONTENT, so unless the
+# script itself or its enabled state changes, the texlive stage stays cached.
+# (Reading build.d/ directly in the texlive stage would rerun the install on
+# every build.d toggle.)
 # ---------------------------------------------------------------------------
+FROM node:22-slim AS texlive-toggle
+COPY build.d.available/50_texlive.sh /t/build.d.available/50_texlive.sh
+COPY build.d/ /t/build.d/
+RUN mkdir /out \
+    && if [ -e /t/build.d/50_texlive.sh ]; then \
+         cp /t/build.d.available/50_texlive.sh /out/; \
+       fi
+
 FROM node:22-slim AS texlive
+COPY --from=texlive-toggle /out/ /tl/
 # node slim ships neither perl nor curl; install-tl needs perl, curl fetches it.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl perl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-COPY build.d.available/50_texlive.sh /usr/local/bin/texlive-install.sh
-RUN bash /usr/local/bin/texlive-install.sh
+RUN if [ -f /tl/50_texlive.sh ]; then \
+      apt-get update && apt-get install -y --no-install-recommends \
+        curl perl ca-certificates \
+      && rm -rf /var/lib/apt/lists/* \
+      && bash /tl/50_texlive.sh; \
+    else \
+      mkdir -p /opt/texlive; \
+    fi
 
 # ===========================================================================
 # Main image.
@@ -51,14 +69,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf "$(command -v fdfind)" /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
 
-# Bring the cached TeX Live into the final image. Placed as LOW as possible so
-# only the lean core below can invalidate it — apt/python/rust/build/npm
-# changes (all above) never re-copy or re-download it.
+# Bring the cached TeX Live (empty if the unit is disabled) into the final
+# image. Placed right after the lean core, so only a core edit above re-copies
+# it (a local copy, never a re-download); the apt/python/rust/build/npm layers
+# all sit below and can't touch it.
 COPY --from=texlive /opt/texlive /opt/texlive
 # Expose TeX Live binaries on PATH for all users. /usr/local/bin precedes
-# /usr/bin, so these win over any distro tools. Idempotent, cheap to redo.
+# /usr/bin, so these win over any distro tools. No-op when /opt/texlive is
+# empty (the unmatched glob fails the -f test).
 RUN for b in /opt/texlive/*/bin/*/*; do \
-      [ -f "$b" ] && [ -x "$b" ] && ln -sf "$b" "/usr/local/bin/$(basename "$b")"; \
+      if [ -f "$b" ] && [ -x "$b" ]; then \
+        ln -sf "$b" "/usr/local/bin/$(basename "$b")" || exit 1; \
+      fi; \
     done
 
 # Docker Compose v2 plugin (docker.io apt pkg ships the CLI only). The release
@@ -136,7 +158,8 @@ RUN bash /usr/local/bin/install-from-dir.sh cargo /build/rust.d
 
 COPY build.d.available/ /build/build.d.available/
 COPY build.d/ /build/build.d/
-RUN bash /usr/local/bin/install-from-dir.sh build /build/build.d
+# 50_texlive.sh is installed by the dedicated texlive stage above, not here.
+RUN INSTALL_SKIP=50_texlive.sh bash /usr/local/bin/install-from-dir.sh build /build/build.d
 
 RUN git config --system safe.directory '*'
 

@@ -16,6 +16,10 @@
 #                   for things no package manager covers: binary downloads, apt
 #                   repos, etc.)
 #
+# INSTALL_SKIP (env, optional): space-separated unit filenames to leave out —
+# for units the Dockerfile installs elsewhere (e.g. 50_texlive.sh, which gets
+# its own build stage).
+#
 # A missing or empty directory is a no-op, so every kind is fully optional.
 set -euo pipefail
 
@@ -32,6 +36,16 @@ fi
 # them — a symlink to a regular file then matches -type f.
 mapfile -t files < <(find -L "$dir" -maxdepth 1 -type f \
   ! -name '.gitkeep' ! -name '.gitignore' ! -name 'README.md' | sort)
+
+kept=()
+for f in "${files[@]}"; do
+  if [[ " ${INSTALL_SKIP:-} " == *" $(basename "$f") "* ]]; then
+    echo "[$kind] skipping $(basename "$f") (INSTALL_SKIP)"
+  else
+    kept+=("$f")
+  fi
+done
+files=("${kept[@]}")
 
 if [ "${#files[@]}" -eq 0 ]; then
   echo "[$kind] no drop-in files in $dir — skipping"

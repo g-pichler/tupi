@@ -1,45 +1,49 @@
 #!/usr/bin/env bash
 #
-# Upstream TeX Live (current release) — replaces the Debian texlive-full apt
-# unit, which always lags years behind (bookworm ships TeX Live 2022 + biber
-# 2.18 forever). Installing straight from https://tug.org/texlive gives the
-# current year's matching toolset (pdflatex + biber + biblatex stay
-# version-consistent, e.g. TeX Live 2026 -> biber 2.21, pdfTeX 1.40.29).
+# Upstream TeX Live (current release) — an alternative to the Debian
+# texlive-full apt unit, which lags years behind (bookworm ships TeX Live 2022
+# + biber 2.18 forever). Installing straight from https://tug.org/texlive gives
+# a current, self-consistent toolset (pdflatex, biber, and biblatex versions
+# all match).
 #
-# This runs in a DEDICATED multi-stage image (see Dockerfile `FROM ... AS
-# texlive`), NOT the generic build.d run, so its multi-GB install is downloaded
-# once and cached forever — no other change (npm bump, apt/python/rust edits,
-# other build.d scripts) invalidates it. The Dockerfile then COPYs /opt/texlive
-# into the main image and symlinks its binaries into /usr/local/bin.
+# Enable like any build unit (`./config.d.sh enable build 50_texlive.sh`), but
+# it does NOT run in the generic build.d loop (the Dockerfile passes
+# INSTALL_SKIP=50_texlive.sh there). The Dockerfile runs it in a dedicated
+# stage (`FROM ... AS texlive`), so the multi-GB install is downloaded once and
+# cached: no other change (npm bump, apt/python/rust edits, other build.d
+# units) invalidates it. The main image then COPYs /opt/texlive in and symlinks
+# its binaries into /usr/local/bin. Disabled, the stage is an empty no-op.
 #
-# It's an *alternative* to the distro `apt 00_texlive` unit: leave that unit
-# disabled so the upstream install is the one that wins (the Dockerfile symlinks
-# on /usr/local/bin precede /usr/bin anyway).
+# Enable this OR the distro `apt 00_texlive` unit, not both (with both, these
+# /usr/local/bin symlinks shadow the /usr/bin ones anyway).
 #
-# CONFIGURABLE — edit these in this file (tracked catalog), then rebuild:
-#   TEXLIVE_YEAR     release tag/install dir. Defaults to the current tlnet
-#                    release (autodetected from the install-tl tarball date);
-#                    pin it to e.g. 2025 if you want a specific release.
-#   TEXLIVE_SCHEME   what to install: scheme-full (default, multi-GB but the
-#                    apt texlive-full equivalent), or a leaner scheme
-#                    (scheme-basic, scheme-medium) — biber + pdflatex + a
-#                    LaTeX engine ride along on all of them.
-#   TEXLIVE_MIRROR   any CTAN/texlive mirror hosting .../systems/texlive/tlnet.
-# For arbitrary per-package pins after install (e.g. a specific biber), run
-# `tlmgr install <pkg>@<rev>` / `tlmgr update --all` in the shell and they
-# persist because /opt/texlive isn't a Docker volume.
+# CONFIGURABLE: edit the defaults below, then rebuild. Editing this file
+# rebuilds (re-downloads) TeX Live; nothing else does.
+#   TEXLIVE_SCHEME   what to install: scheme-full (default, multi-GB, the
+#                    texlive-full equivalent) or a leaner scheme (scheme-medium,
+#                    scheme-basic). pdflatex comes with all of them; biber
+#                    only with schemes that include collection-bibtexextra
+#                    (scheme-full does, scheme-basic doesn't).
+#   TEXLIVE_MIRROR   tlnet repository to install from. The default serves the
+#                    current release. For a past release, point it at that
+#                    year's frozen repo, e.g.
+#                    https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/tlnet-final
+#   TEXLIVE_YEAR     install dir name under /opt/texlive. Leave empty to use
+#                    the release year the mirror reports. This does NOT pick
+#                    the release; TEXLIVE_MIRROR does.
+# Runtime `tlmgr` changes don't stick: /opt/texlive is root-owned and every
+# container is `run --rm`. To add or update packages, append `tlmgr` commands
+# at the end of this script and rebuild.
 #
-# Mirrors the /opt/cargo + /opt/elan pattern: installs into world-readable
-# /opt/texlive (chmod a+rX so any runtime UID — including the `node` user
-# remapped to an arbitrary HOST_UID by entrypoint.sh — can use it). The
-# Dockerfile handles PATH exposure via /usr/local/bin symlinks.
+# Same pattern as /opt/cargo and /opt/elan: installs into world-readable
+# /opt/texlive (chmod a+rX so any runtime UID, including the `node` user
+# remapped to HOST_UID by entrypoint.sh, can use it).
 set -euo pipefail
 
 TEXLIVE_YEAR="${TEXLIVE_YEAR:-}"
 TEXLIVE_SCHEME="${TEXLIVE_SCHEME:-scheme-full}"
 TEXLIVE_MIRROR="${TEXLIVE_MIRROR:-https://mirror.ctan.org/systems/texlive/tlnet}"
 TEXLIVE_ROOT="${TEXLIVE_ROOT:-/opt/texlive}"
-TEXLIVE_FORCE="${TEXLIVE_FORCE:-0}"
 
 # TeX Live's platform name; matches dpkg arch for the two we target.
 case "$(dpkg --print-architecture)" in
@@ -47,7 +51,6 @@ case "$(dpkg --print-architecture)" in
   arm64) TL_ARCH="aarch64-linux" ;;
   *) echo "[texlive] unsupported arch: $(dpkg --print-architecture)" >&2; exit 1 ;;
 esac
-
 
 url="${TEXLIVE_MIRROR%/}/install-tl-unx.tar.gz"
 tmp="$(mktemp -d /tmp/texlive-install.XXXXXX)"
@@ -57,24 +60,20 @@ echo "[texlive] importing release from $url"
 curl -fsSL "$url" -o "$tmp/install-tl.tar.gz"
 tar -xzf "$tmp/install-tl.tar.gz" -C "$tmp"
 
-# Derive the release year from the tarball dir (install-tl-YYYYMMDD) unless
-# pinned. install-tl always tracks the current tlnet release, so this matches
-# the mirror you're pulling from.
+# Take the release year from install-tl's own release file ("TeX Live (...)
+# version YYYY") unless set. The tarball's date suffix (install-tl-YYYYMMDD)
+# isn't reliable: a January build still ships the previous year's release.
 if [ -z "$TEXLIVE_YEAR" ]; then
-  dir="$(ls -d "$tmp"/install-tl-*)"
-  TEXLIVE_YEAR="$(basename "$dir" | sed -E 's/^install-tl-([0-9]{4}).*/\1/')"
+  TEXLIVE_YEAR="$(sed -nE '1s/.*version ([0-9]{4}).*/\1/p' \
+    "$tmp"/install-tl-*/release-texlive.txt)"
+  [ -n "$TEXLIVE_YEAR" ] || { echo "[texlive] can't detect release year" >&2; exit 1; }
 fi
 echo "[texlive] release $TEXLIVE_YEAR, scheme $TEXLIVE_SCHEME"
 
 texdir="$TEXLIVE_ROOT/$TEXLIVE_YEAR"
-if [ -x "$texdir/bin/"*/*/pdflatex ] && [ "$TEXLIVE_FORCE" != 1 ]; then
-  echo "[texlive] $texdir already installed (TEXLIVE_FORCE!=1) — skipping"
-  exit 0
-fi
 
-# Notes: runs in its own dedicated stage, so there's no Debian texlive to purge
-# here. Docs/srcfiles off (multi-GB, rarely wanted in a container). adjustpath
-# off: the Dockerfile symlinks TeX Live into /usr/local/bin for PATH.
+# Docs/srcfiles off (multi-GB, rarely wanted in a container). adjustpath off:
+# the Dockerfile symlinks TeX Live into /usr/local/bin for PATH.
 cat > "$tmp/texlive.profile" <<EOF
 selected_scheme $TEXLIVE_SCHEME
 TEXDIR $texdir

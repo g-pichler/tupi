@@ -9,9 +9,9 @@ at image-build time. Manage them with `../config.d.sh` — don't edit by hand:
 ../config.d.sh list build
 ```
 
-Note: `50_texlive.sh` is an exception — it is enabled'ed here into the run loop,
-but the Dockerfile builds it in its own dedicated stage for cache isolation (see
-`build.d.available/README.md`), so don't enable it via this dir.
+`50_texlive.sh` is enabled here like any other unit, but it doesn't run in the
+regular build loop. The Dockerfile installs it in a dedicated stage so its
+multi-GB download is cached separately (see `build.d.available/README.md`).
 
 This dir is gitignored except this README, so what you enable stays local to
 your checkout. After changes, rebuild: `docker compose build` (or rerun
