@@ -1,6 +1,6 @@
 # TUpi sandbox
 
-Docker-based dev container bundling the [`pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), Claude Code, and the Anthropic SDK on a lean core (Node, git, build tools, Python 3, ripgrep/fd). Heavier tooling — TeX Live, OCR, image processing / raw development (darktable, NEF support), Rust, Typst, Soufflé, the scientific Python stack — is opt-in via drop-in package lists (see [Adding tools to the image](#adding-tools-to-the-image)). An optional GPU-backed Ollama service is wired up via `docker-compose`.
+Docker-based dev container bundling the [`pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), Claude Code, and the Anthropic SDK on a lean core (Node, git, build tools, Python 3, ripgrep/fd). Heavier tooling — TeX Live, OCR, image processing / raw development (darktable, NEF support), Rust, Typst, Soufflé, Catala, the scientific Python stack — is opt-in via drop-in package lists (see [Adding tools to the image](#adding-tools-to-the-image)). An optional GPU-backed Ollama service is wired up via `docker-compose`.
 
 ## Quick start
 
@@ -124,6 +124,17 @@ units, not edit the Dockerfile:
 | `rust`   | cargo crate names              | `cargo install` (bootstraps rustup on demand) |
 | `build`  | shell scripts (escape hatch)   | run with `bash`                               |
 
+The Rust toolchain is only bootstrapped when an enabled `rust` unit lists crates.
+Which one you get is configurable: set `RUST_VERSION` in `.env` (compose passes it
+as a build arg) to anything rustup accepts — `stable` (default), `beta`, `nightly`,
+a pinned `1.83.0`, or a dated `nightly-2025-01-15`. Changing it only rebuilds the
+rust layer.
+
+The toolchain itself sits in the shared, read-only `/opt/{rustup,cargo}`, but the
+*runtime* `CARGO_HOME` is `~/.cargo` (a persistent `cargo-cache` volume) so your
+own `cargo build` can write its registry/git caches and lock files. `rustup
+update` is not supported inside the container — bump `RUST_VERSION` and rebuild.
+
 It works Apache-`a2enmod` style. Units live in a tracked catalog,
 `<type>.d.available/`; you **enable** the ones you want and `config.d.sh` symlinks
 them into the live `<type>.d/` dir (gitignored, so your selection stays local):
@@ -141,7 +152,7 @@ apply in **filename-sort order** (e.g. `00_texlive` before `20_ocr`). The catalo
 ships TeX Live, the OCR stack, an image-processing/raw-development toolbox
 (darktable, RawTherapee, LibRaw, dcraw, ImageMagick, exiftool — handles Nikon
 NEF and other raw formats), the scientific Python set, and `build` scripts for
-Soufflé, Typst, and the Gitea CLI; to add your own, drop a file in the relevant
+Soufflé, Typst, Catala, and the Gitea CLI; to add your own, drop a file in the relevant
 `*.d.available/` and enable it.
 
 **Two TeX Live options.** The `apt 00_texlive` unit installs the Debian release
@@ -184,7 +195,7 @@ is its own layer, so editing one list only rebuilds it and the layers below.
 
 - `entrypoint.sh` reconciles UIDs: it remaps the baked-in `node` user (via `usermod`/`groupmod`) to `HOST_UID`/`HOST_GID` so files written to the bind mounts are owned by you on the host. Because a single user is reused, `HOME` is always `/home/node`, so config (`.claude` from `pi-config/claude`, `.gitconfig` from the host, …) is bind-mounted only there. If the Docker socket is mounted (opt-in — see [Host Docker access](#️-host-docker-access-opt-in)) it also joins that socket's group.
 - `pi-config/agent` is bind-mounted to `/pi-config` and auto-`npm install`s any `extensions/*/package.json`.
-- `.env` feeds API keys into the container (see `.env.example`).
+- `.env` feeds API keys into the container (see `.env.example`). It also supplies build-time knobs compose interpolates, e.g. `RUST_VERSION`.
 
 ## Rebuilding
 

@@ -4,11 +4,15 @@ services:
       context: .
       args:
         NPM_CACHEBUST: ${NPM_CACHEBUST:-0}
+        RUST_VERSION: ${RUST_VERSION:-stable}
     volumes:
       - .:/workspace
       - ./pi-config/agent:/pi-config
       - ./pi-config/claude:/home/node/.claude
       - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
+      # Runtime CARGO_HOME (see Dockerfile): writable by the container user and
+      # persistent, so the crate registry cache is not re-downloaded every run.
+      - cargo-cache:/home/node/.cargo
       # entrypoint.sh remaps the single `node` user to HOST_UID, so HOME is
       # always /home/node — host config mounts there regardless of host UID.
       # NOTE: the host Docker socket is NOT mounted by default. Mounting it grants
@@ -44,3 +48,4 @@ services:
 
 volumes:
   ollama-data:
+  cargo-cache:

@@ -57,14 +57,20 @@ if [ "$(id -u)" = "0" ] && [ -n "$HOST_UID" ]; then
   # is pure cost. The .claude dir itself is NOT pruned: on a fresh clone Docker
   # creates that mount source root-owned, and the container user must be able to
   # create sessions/, projects/, … inside it.
-  find "$PI_HOME" \( -path "$PI_HOME/.claude/*" -o -path "$PI_HOME/.gitconfig" \) -prune \
+  # .cargo is pruned for the same reason as .claude: it is a mount (the
+  # cargo-cache volume) whose contents are created by the container user and can
+  # grow to tens of thousands of registry files. The dir itself is not pruned,
+  # so a freshly created, root-owned volume root becomes writable.
+  find "$PI_HOME" \( -path "$PI_HOME/.claude/*" -o -path "$PI_HOME/.cargo/*" \
+                   -o -path "$PI_HOME/.gitconfig" \) -prune \
        -o -exec chown "$HOST_UID:$TARGET_GID" {} +
   chown -R "$HOST_UID:$TARGET_GID" "$PI_DIR"
   chown "$HOST_UID:$TARGET_GID" "$CLAUDE_DIR/.claude.json"
 
-  # Rust lives in world-readable /opt/{cargo,rustup} (see Dockerfile /
-  # install-from-dir.sh), already on the image's ENV PATH — no per-start copy
-  # into HOME needed. gosu inherits that PATH and RUSTUP_HOME/CARGO_HOME.
+  # Rust toolchain + rustup live in world-readable /opt/{cargo,rustup} (see
+  # Dockerfile / install-from-dir.sh), already on the image's ENV PATH — no
+  # per-start copy into HOME needed. gosu inherits that PATH, RUSTUP_HOME, and
+  # the runtime CARGO_HOME (~/.cargo, writable — /opt/cargo is not).
   export HOME="$PI_HOME"
   exec gosu "$PI_USER" "$@"
 fi

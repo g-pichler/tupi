@@ -11,7 +11,8 @@
 #
 #   KIND = apt   -> apt-get install the listed packages
 #   KIND = pip   -> pip install the listed packages
-#   KIND = cargo -> cargo install the listed crates (bootstraps rustup if needed)
+#   KIND = cargo -> cargo install the listed crates (bootstraps rustup if needed;
+#                   RUST_VERSION env picks the toolchain, default `stable`)
 #   KIND = build -> execute each file as a shell script, in order (escape hatch
 #                   for things no package manager covers: binary downloads, apt
 #                   repos, etc.)
@@ -99,10 +100,12 @@ case "$kind" in
     # RUSTUP_HOME/CARGO_HOME to /opt and drop crate binaries into /usr/local/bin
     # (already on PATH for all users). chmod a+rX so any runtime UID can use it.
     export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
+    # RUST_VERSION selects the toolchain: `stable`, `beta`, `nightly`, a pinned
+    # release (`1.83.0`) or a dated nightly (`nightly-2025-01-15`).
     if ! command -v cargo >/dev/null 2>&1; then
-      echo "[cargo] Rust toolchain not found — bootstrapping rustup"
+      echo "[cargo] Rust toolchain not found — bootstrapping rustup (${RUST_VERSION:-stable})"
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-        | sh -s -- -y --default-toolchain stable --profile minimal
+        | sh -s -- -y --default-toolchain "${RUST_VERSION:-stable}" --profile minimal
       export PATH="/opt/cargo/bin:$PATH"
     fi
     cargo install --root /usr/local "${pkgs[@]}"

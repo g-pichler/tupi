@@ -154,7 +154,11 @@ RUN bash /usr/local/bin/install-from-dir.sh pip /build/python.d
 
 COPY rust.d.available/ /build/rust.d.available/
 COPY rust.d/ /build/rust.d/
-RUN bash /usr/local/bin/install-from-dir.sh cargo /build/rust.d
+# Toolchain rustup bootstraps when a rust.d unit lists crates. Set via .env /
+# compose build arg (RUST_VERSION=1.83.0, nightly, nightly-2025-01-15, ...).
+# Declared here, not at the top, so changing it only rebuilds this layer down.
+ARG RUST_VERSION=stable
+RUN RUST_VERSION="$RUST_VERSION" bash /usr/local/bin/install-from-dir.sh cargo /build/rust.d
 
 COPY build.d.available/ /build/build.d.available/
 COPY build.d/ /build/build.d/
@@ -171,6 +175,19 @@ RUN echo "cachebust=${NPM_CACHEBUST}" \
 
 # claude config symlink
 RUN ln -s '/home/node/.claude/.claude.json' '/home/node/.claude.json'
+
+# Build-time cargo installs into the shared /opt dirs (install-from-dir.sh
+# exports its own RUSTUP_HOME/CARGO_HOME, so this ENV does not affect them). At
+# *runtime* /opt/cargo is root-owned and read-only for the `node` user, so any
+# `cargo build` dies trying to write CARGO_HOME (registry cache, git checkouts,
+# the .package-cache lock). Point the runtime CARGO_HOME at HOME instead; the
+# rustup proxies still live on PATH in /opt/cargo/bin and RUSTUP_HOME stays
+# shared + read-only (rustc/cargo only read it; `rustup update` won't work).
+# docker-compose.yml mounts a named volume here so the crate cache survives
+# container restarts.
+ENV CARGO_HOME=/home/node/.cargo
+ENV PATH="/home/node/.cargo/bin:${PATH}"
+RUN mkdir -p /home/node/.cargo && chown node:node /home/node/.cargo
 
 # entrypoint.sh last so editing it only invalidates this cheap COPY.
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
