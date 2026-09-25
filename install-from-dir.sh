@@ -12,7 +12,8 @@
 #   KIND = apt   -> apt-get install the listed packages
 #   KIND = pip   -> pip install the listed packages
 #   KIND = cargo -> cargo install the listed crates (bootstraps rustup if needed;
-#                   RUST_VERSION env picks the toolchain, default `stable`)
+#                   RUST_VERSION env picks the toolchain, default `stable`;
+#                   rustfmt + clippy are always added to it)
 #   KIND = build -> execute each file as a shell script, in order (escape hatch
 #                   for things no package manager covers: binary downloads, apt
 #                   repos, etc.)
@@ -104,9 +105,23 @@ case "$kind" in
     # release (`1.83.0`) or a dated nightly (`nightly-2025-01-15`).
     if ! command -v cargo >/dev/null 2>&1; then
       echo "[cargo] Rust toolchain not found — bootstrapping rustup (${RUST_VERSION:-stable})"
+      # `minimal` keeps rust-docs (~100MB) out; -c adds back the two components
+      # everyone actually wants. Without them rustup still installs *proxy
+      # shims* at /opt/cargo/bin/{rustfmt,cargo-fmt,cargo-clippy,clippy-driver},
+      # so `which rustfmt` succeeds and only running it reveals the component is
+      # missing — which reads like a toolchain mismatch. Installing them here is
+      # the only chance: at runtime RUSTUP_HOME=/opt/rustup is root-owned and
+      # read-only for the `node` user, so `rustup component add` fails.
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-        | sh -s -- -y --default-toolchain "${RUST_VERSION:-stable}" --profile minimal
+        | sh -s -- -y --default-toolchain "${RUST_VERSION:-stable}" --profile minimal \
+            -c rustfmt -c clippy
       export PATH="/opt/cargo/bin:$PATH"
+    fi
+    # Also covers the case where cargo already exists (e.g. an earlier build
+    # installed it without the components, or it came from a base image): the
+    # bootstrap above is skipped, so add them unconditionally. No-op if present.
+    if command -v rustup >/dev/null 2>&1; then
+      rustup component add rustfmt clippy
     fi
     cargo install --root /usr/local "${pkgs[@]}"
     chmod -R a+rX /opt/rustup /opt/cargo
