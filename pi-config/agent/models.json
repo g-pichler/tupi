@@ -1,6 +1,6 @@
 {
-  "providers": {
-    "ollama": {
+    "providers": {
+     "ollama": {
       "baseUrl": "http://ollama:11434/v1",
       "api": "openai-completions",
       "apiKey": "ollama",
@@ -10,27 +10,85 @@
         "supportsStrictMode": false
       },
       "models": [{ "id": "qwen3:4b" }]
-    },
+     },
     "aqueduct": {
-      "baseUrl": "https://aqueduct.ai.datalab.tuwien.ac.at/v1",
+      "baseUrl": "https://aqueduct.ai.datalab.tuwien.ac.at/v1/",
       "api": "openai-completions",
       "apiKey": "${AQUEDUCT_API_KEY}",
-      "compat": {
-        "supportsDeveloperRole": false,
-        "supportsReasoningEffort": false,
-        "supportsStrictMode": false
-      },
-	"models": [{ "id": "qwen-3.5-397b",
-		     "contextWindow": 200000
-		   },
-		   { "id": "glm-5.2-744b-preview",
-		     "contextWindow": 524000
-		   },
-		   {
-		       "id": "deepseek-v4-flash-284b",
-		       "contextWindow": 393216
-		   }
-		  ]
+      "models": [
+        {
+          "id": "qwen-3.8-27b",
+          "name": "Qwen3.8-27B",
+          "input": ["text", "image"],
+          "contextWindow": 262144,
+          "maxTokens": 32000,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": null,
+            "xhigh": "xhigh",
+            "max": null
+          },
+          "compat": {
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "thinking": { "$var": "thinking.enabled" },
+              "reasoning_effort": { "$var": "thinking.effort" }
+            }
+          }
+        },
+        {
+          "id": "glm-5.3-744b-experimental",
+          "name": "GLM 5.3",
+          "input": ["text"],
+          "contextWindow": 262144,
+          "maxTokens": 32000,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "compat": {
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "thinking": { "$var": "thinking.enabled" },
+              "reasoning_effort": { "$var": "thinking.effort" }
+            }
+          }
+        },
+        {
+          "id": "deepseek-v4-vision-exp-284b",
+          "name": "DeepSeek-V4-Flash-Vision-Exp",
+          "input": ["text", "image"],
+          "contextWindow": 393216,
+          "maxTokens": 32000,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          },
+          "compat": {
+            "thinkingFormat": "chat-template",
+            "chatTemplateKwargs": {
+              "thinking": { "$var": "thinking.enabled" },
+              "reasoning_effort": { "$var": "thinking.effort" }
+            }
+          }
+        }
+      ]
     }
   }
 }

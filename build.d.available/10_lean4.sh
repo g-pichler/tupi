@@ -28,4 +28,11 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf 
 "$ELAN_HOME/bin/lean" --version >/dev/null
 
 # World-readable so any runtime UID can use it (entrypoint remaps node→HOST_UID).
-chmod -R a+rX "$ELAN_HOME"
+# Also grant world write: the runtime user is `node` remapped to an arbitrary
+# host UID, so we can't chown to a fixed UID at build. Leave /opt/elan writable
+# so `elan install` can fetch NEW toolchains at runtime (e.g. `stable`,
+# `leanprover/lean4:4.XX`), not just use the pinned default. Single-user gosu
+# container, so world write on a shared, no-secrets home is acceptable.
+# Uppercase X only adds execute where a dir (or someone) already has execute,
+# so binaries keep their bits; a+rw covers toolchain dirs elan must write.
+chmod -R a+rwX "$ELAN_HOME"
